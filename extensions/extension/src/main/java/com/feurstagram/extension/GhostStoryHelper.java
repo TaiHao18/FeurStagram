@@ -1,4 +1,4 @@
-package app.feurstagram.extension;
+package com.feurstagram.extension;
 
 import android.content.Context;
 import android.util.Log;
