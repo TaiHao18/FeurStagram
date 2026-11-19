@@ -63,16 +63,15 @@ val networkBlockPatch = bytecodePatch(
 
     execute {
         TigonStartRequestFingerprint.method.apply {
-            // The request URI is loaded into a register via an `iget-object` of
-            // type java.net.URI inside the request-sending try block. Inject our
-            // observer right after it. It never throws or changes the request.
             val uriLoad = instructions.first { it.isUriLoad() }
             val uriRegister = (uriLoad as OneRegisterInstruction).registerA
 
             addInstructions(
                 uriLoad.location.index + 1,
                 "invoke-static/range { v$uriRegister .. v$uriRegister }, " +
-                    "$BLOCK_CLASS->onRequest(Ljava/net/URI;)V",
+                    "$BLOCK_CLASS->onRequest(Ljava/net/URI;)V\n" +
+                    "invoke-static/range { v$uriRegister .. v$uriRegister }, " +
+                    "$GHOST_STORY_CLASS->checkAndBlock(Ljava/net/URI;)V",
             )
         }
 
