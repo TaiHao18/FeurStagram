@@ -1,4 +1,4 @@
-package app.feurstagram.extension;
+package com.feurstagram.extension;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
