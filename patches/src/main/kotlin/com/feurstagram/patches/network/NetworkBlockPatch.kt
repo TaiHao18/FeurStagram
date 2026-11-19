@@ -19,6 +19,7 @@ import com.feurstagram.patches.shared.Constants.EXTENSION
 
 private const val BLOCK_CLASS = "Lcom/feurstagram/extension/Block;"
 private const val RESPONSE_CLASS = "Lcom/feurstagram/extension/ResponseFilter;"
+private const val GHOST_STORY_CLASS = "Lcom/feurstagram/extension/GhostStoryHelper;"
 
 // This dispatcher receives body bytes after Tigon has downloaded them. Match
 // its diagnostic marker and signature, then resolve the other lifecycle calls
