@@ -22,36 +22,52 @@ public final class NoteTrackerHelper {
     private static final String PREF_NAME = "feur_note_tracker_prefs";
     private static final String KEY_ENABLED = "note_tracker_enabled";
     private static final String CHANNEL_ID = "feur_ig_note_alert";
+    private static volatile Context cachedContext;
 
-    // Điền danh sách username cần theo dõi (viết thường toàn bộ)
+    // Danh sách username cần theo dõi (viết thường)
     private static final Set<String> TARGET_USERS = new HashSet<>(Arrays.asList(
             "haoj.taii"
     ));
 
     private NoteTrackerHelper() {}
 
+    private static Context resolveContext(Context context) {
+        if (context != null) return context.getApplicationContext();
+        if (cachedContext != null) return cachedContext;
+        try {
+            Class<?> at = Class.forName("android.app.ActivityThread");
+            Object app = at.getMethod("currentApplication").invoke(null);
+            if (app instanceof Context) {
+                cachedContext = ((Context) app).getApplicationContext();
+                return cachedContext;
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "Cannot resolve Application context: " + t.getMessage());
+        }
+        return null;
+    }
+
     public static boolean isEnabled(Context context) {
-        if (context == null) return true;
-        return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        Context appCtx = resolveContext(context);
+        if (appCtx == null) return true;
+        return appCtx.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
                 .getBoolean(KEY_ENABLED, true);
     }
 
     public static void setEnabled(Context context, boolean enabled) {
-        if (context == null) return;
-        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        Context appCtx = resolveContext(context);
+        if (appCtx == null) return;
+        appCtx.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .putBoolean(KEY_ENABLED, enabled)
                 .apply();
     }
 
-    /**
-     * Gọi hàm này ngay khi nhận được chuỗi JSON phản hồi từ các API inbox / notes.
-     */
     public static void inspectResponse(Context context, String rawJson) {
-        if (context == null || rawJson == null || rawJson.isEmpty()) return;
-        if (!isEnabled(context)) return;
+        Context appCtx = resolveContext(context);
+        if (appCtx == null || rawJson == null || rawJson.isEmpty()) return;
+        if (!isEnabled(appCtx)) return;
 
-        // Lọc nhanh để không tốn CPU phân tích các gói tin không chứa tài khoản mục tiêu
         String lowerRaw = rawJson.toLowerCase(Locale.ROOT);
         boolean hasTarget = false;
         for (String target : TARGET_USERS) {
@@ -64,18 +80,16 @@ public final class NoteTrackerHelper {
 
         try {
             String cleaned = rawJson.trim();
-            // Bỏ tiền tố chống JSON hijacking nếu Meta trả về dạng "for (;;);"
             if (cleaned.startsWith("for (;;);")) {
                 cleaned = cleaned.substring(9).trim();
             }
 
             if (cleaned.startsWith("{")) {
-                traverseJson(context, new JSONObject(cleaned));
+                traverseJson(appCtx, new JSONObject(cleaned));
             } else if (cleaned.startsWith("[")) {
-                traverseJson(context, new JSONArray(cleaned));
+                traverseJson(appCtx, new JSONArray(cleaned));
             }
         } catch (Throwable t) {
-            // Bỏ qua an toàn nếu dữ liệu trả về không phải JSON chuẩn
             Log.d(TAG, "Skip non-JSON response: " + t.getMessage());
         }
     }
@@ -105,7 +119,6 @@ public final class NoteTrackerHelper {
     }
 
     private static void tryExtractNote(Context context, JSONObject obj) {
-        // Nhận diện khối dữ liệu Note: có chứa user/author kèm text hoặc thông tin nhạc
         boolean looksLikeNote = obj.has("note_response_info")
                 || obj.has("music_note_response_info")
                 || obj.has("note_id")
