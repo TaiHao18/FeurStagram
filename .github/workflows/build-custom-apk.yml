@@ -1,1 +1,87 @@
+name: Build Custom Feurstagram APK
 
+on:
+  workflow_dispatch:
+    inputs:
+      apk_url:
+        description: 'Link tải trực tiếp file Instagram (.apk, .apkm, .xapk hoặc .apks)'
+        required: true
+        type: string
+      morphe_cli_url:
+        description: 'Link tải trực tiếp file morphe-cli-*.jar hoặc morphe-desktop-*.jar'
+        required: true
+        type: string
+      clone:
+        description: 'Bật --clone để cài song song với Instagram gốc'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Configure Gradle GitHub Packages auth
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p ~/.gradle
+          printf "gpr.user=%s\ngpr.key=%s\n" "$GITHUB_ACTOR" "$GITHUB_TOKEN" >> ~/.gradle/gradle.properties
+
+      - name: Download build tools (Morphe CLI and APKEditor)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MORPHE_URL: ${{ inputs.morphe_cli_url }}
+        run: |
+          mkdir -p tools
+          curl -fL "$MORPHE_URL" -o tools/morphe-cli-latest.jar
+          gh release download V1.4.9 -R REAndroid/APKEditor -p 'APKEditor-1.4.9.jar' -D tools/
+          ls -lh tools/
+
+      - name: Download Instagram APK/Bundle
+        env:
+          APK_URL: ${{ inputs.apk_url }}
+        run: |
+          RAW_NAME="$(basename "${APK_URL%%\?*}")"
+          case "$RAW_NAME" in
+            *.apk|*.apkm|*.xapk|*.apks) FILE_NAME="$RAW_NAME" ;;
+            *) FILE_NAME="instagram.apk" ;;
+          esac
+          curl -fL "$APK_URL" -o "$FILE_NAME"
+          ls -lh "$FILE_NAME"
+          echo "APK_FILE=$FILE_NAME" >> "$GITHUB_ENV"
+
+      - name: Build patched APK
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: |
+          chmod +x gradlew build.sh
+          if [ "${{ inputs.clone }}" = "true" ]; then
+            ./build.sh "$APK_FILE" --clone
+          else
+            ./build.sh "$APK_FILE"
+          fi
+
+      - name: Upload Custom APK and Patch Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: Feurstagram-Custom-APK
+          path: |
+            feurstagram.apk
+            build/patch-report.json
+          if-no-files-found: error
